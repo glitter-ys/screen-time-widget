@@ -96,7 +96,7 @@ enum SnapshotRenderer {
         )
         write(
             ThemeShowcase(),
-            size: CGSize(width: 900, height: 880),
+            size: CGSize(width: 1200, height: 760),
             to: base.appendingPathComponent("preview-themes.png")
         )
         write(
@@ -270,13 +270,11 @@ private struct ThemeShowcase: View {
                     card(.mint)
                     card(.sunset)
                     card(.berry)
+                    card(.minimal)
                 }
                 HStack(alignment: .top, spacing: 18) {
-                    card(.minimal)
                     card(.cream)
                     card(.amber)
-                }
-                HStack(alignment: .top, spacing: 18) {
                     card(.ice)
                     card(.terracotta)
                 }
