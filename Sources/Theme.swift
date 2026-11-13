@@ -271,6 +271,14 @@ enum WidgetTheme: String, CaseIterable, Identifiable, Equatable {
         isLight ? Color(hex: 0xD04B43) : Palette.red
     }
 
+    /// A soft tint of the card's own surface, pulled toward the theme accent.
+    /// This keeps the encouragement block integrated with every theme instead
+    /// of stamping the same terracotta panel onto all of them.
+    var encouragementSurface: Color {
+        let base = drawerTop.blended(with: drawerBottom, ratio: 0.5)
+        return base.blended(with: active, ratio: isLight ? 0.12 : 0.20)
+    }
+
     var usesSegmentedProgress: Bool {
         self == .minimal
     }
@@ -287,7 +295,41 @@ enum WidgetTheme: String, CaseIterable, Identifiable, Equatable {
     }
 }
 
+/// The encouragement banner keeps its own quiet terracotta palette so the copy
+/// block stays legible and visually separate from the selected accent theme.
+enum EncouragementPalette {
+    static let accent = Color(hex: 0xBC7459)
+
+    static func accent(light: Bool) -> Color {
+        accent
+    }
+
+    static func primaryText(light: Bool) -> Color {
+        light ? Color(hex: 0x603E35) : Color(hex: 0xF4DFD3)
+    }
+
+    static func line(light: Bool) -> Color {
+        light ? Color(hex: 0xECDED4) : Color(hex: 0x584137)
+    }
+}
+
 extension Color {
+    /// Linear sRGB blending, used for theme-derived surfaces.
+    func blended(with other: Color, ratio: Double) -> Color {
+        let amount = min(1, max(0, ratio))
+        guard
+            let base = NSColor(self).usingColorSpace(.sRGB),
+            let target = NSColor(other).usingColorSpace(.sRGB)
+        else { return self }
+        return Color(
+            .sRGB,
+            red: base.redComponent + (target.redComponent - base.redComponent) * amount,
+            green: base.greenComponent + (target.greenComponent - base.greenComponent) * amount,
+            blue: base.blueComponent + (target.blueComponent - base.blueComponent) * amount,
+            opacity: 1
+        )
+    }
+
     init(hex: UInt32, opacity: Double = 1) {
         self.init(
             .sRGB,

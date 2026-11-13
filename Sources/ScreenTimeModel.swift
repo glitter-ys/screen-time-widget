@@ -22,6 +22,75 @@ enum StatusTone: Equatable {
     case error
 }
 
+enum EncouragementStage: Equatable {
+    case notStarted
+    case early
+    case quarter
+    case half
+    case threeQuarter
+    case complete
+    case paused
+
+    var text: String {
+        switch self {
+        case .notStarted: return "新的一天，准备出发！"
+        case .early: return "加油呀，今天已经有进展啦！"
+        case .quarter: return "进度在长，你也很棒！"
+        case .half: return "一半达成！给自己点个赞。"
+        case .threeQuarter: return "走过四分之三，真不错！"
+        case .complete: return "今日目标达成！奖励一下自己。"
+        case .paused: return "给自己充个电，休息一下！"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .notStarted, .early, .quarter: return "leaf.fill"
+        case .half, .threeQuarter: return "sparkles"
+        case .complete: return "checkmark.circle.fill"
+        case .paused: return "cup.and.saucer.fill"
+        }
+    }
+}
+
+struct Encouragement: Equatable {
+    let stage: EncouragementStage
+    let text: String
+    let icon: String
+
+    init(stage: EncouragementStage) {
+        self.stage = stage
+        self.text = stage.text
+        self.icon = stage.icon
+    }
+
+    static func resolve(seconds: Double, goalSeconds: Double, isPaused: Bool, ready: Bool) -> Encouragement {
+        guard ready, goalSeconds > 0 else {
+            return Encouragement(stage: isPaused ? .paused : .notStarted)
+        }
+        let progress = max(0, seconds / goalSeconds)
+        if progress >= 1 - 1e-9 {
+            return Encouragement(stage: .complete)
+        }
+        if isPaused {
+            return Encouragement(stage: .paused)
+        }
+        if seconds < 1 {
+            return Encouragement(stage: .notStarted)
+        }
+        if progress < 0.25 {
+            return Encouragement(stage: .early)
+        }
+        if progress < 0.5 {
+            return Encouragement(stage: .quarter)
+        }
+        if progress < 0.75 {
+            return Encouragement(stage: .half)
+        }
+        return Encouragement(stage: .threeQuarter)
+    }
+}
+
 struct WidgetMetrics {
     let timeText: String
     let isPaused: Bool
@@ -38,8 +107,9 @@ struct WidgetMetrics {
     let tone: StatusTone
     let theme: WidgetTheme
     let completionEvent: Int
+    let encouragement: Encouragement
 
-    var isComplete: Bool { progress >= 1 }
+    var isComplete: Bool { progress >= 1 - 1e-9 }
 
     var accent: Color {
         switch tone {
@@ -117,9 +187,12 @@ final class ScreenTimeModel: ObservableObject {
     var metrics: WidgetMetrics {
         let goalSeconds = Double(max(30, goalMinutes) * 60)
         let progress = goalSeconds > 0 ? max(0, displaySeconds / goalSeconds) : 0
-        let percent = Int((progress * 100).rounded())
         let ready = phase == .ready
-        let reached = ready && progress >= 1
+        let complete = ready && goalSeconds > 0 && displaySeconds + 0.001 >= goalSeconds
+        // Round down so 99.x% never reads as a finished 100%.
+        let rawPercent = Int((progress * 100).rounded(.down))
+        let percent = complete ? rawPercent : min(99, rawPercent)
+        let reached = complete
 
         let tone: StatusTone
         let status: String
@@ -170,7 +243,13 @@ final class ScreenTimeModel: ObservableObject {
             statusText: status,
             tone: tone,
             theme: theme,
-            completionEvent: completionEvent
+            completionEvent: completionEvent,
+            encouragement: Encouragement.resolve(
+                seconds: displaySeconds,
+                goalSeconds: goalSeconds,
+                isPaused: isPaused,
+                ready: ready
+            )
         )
     }
 

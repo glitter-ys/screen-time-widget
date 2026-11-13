@@ -113,6 +113,10 @@ final class WidgetWindowController: NSObject, NSWindowDelegate, NSPopoverDelegat
     private var collapseWorkItem: DispatchWorkItem?
     private var saveWorkItem: DispatchWorkItem?
     private var dragPollTimer: Timer?
+    private var frameAnimation: Timer?
+    private var frameAnimationStart = Date()
+    private var frameAnimationFrom = NSRect.zero
+    private var frameAnimationTo = NSRect.zero
     private var historyPopover: NSPopover?
     private var screenObserver: NSObjectProtocol?
 
@@ -154,6 +158,7 @@ final class WidgetWindowController: NSObject, NSWindowDelegate, NSPopoverDelegat
 
     deinit {
         dragPollTimer?.invalidate()
+        frameAnimation?.invalidate()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
     }
 
@@ -167,6 +172,9 @@ final class WidgetWindowController: NSObject, NSWindowDelegate, NSPopoverDelegat
         closeHistory()
         collapseWorkItem?.cancel()
         setExpanded(false)
+        // Collapse immediately while hidden so the next show never starts from
+        // the taller expanded frame.
+        applyAnchor(currentAnchor)
         flushPosition()
         panel.orderOut(nil)
     }
@@ -329,6 +337,8 @@ final class WidgetWindowController: NSObject, NSWindowDelegate, NSPopoverDelegat
     }
 
     private func applyAnchor(_ anchor: CGPoint) {
+        frameAnimation?.invalidate()
+        frameAnimation = nil
         let height = ui.isExpanded ? WidgetLayout.expandedHeight : WidgetLayout.collapsedHeight
         let frame = NSRect(
             x: anchor.x,
@@ -526,11 +536,51 @@ final class WidgetWindowController: NSObject, NSWindowDelegate, NSPopoverDelegat
             width: WidgetLayout.windowWidth,
             height: height
         )
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.26
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            context.allowsImplicitAnimation = true
-            panel.animator().setFrame(frame, display: true)
+        animatePanel(to: frame)
+    }
+
+    private func animatePanel(to target: NSRect, duration: TimeInterval = 0.24) {
+        frameAnimation?.invalidate()
+        frameAnimation = nil
+        frameAnimationFrom = panel.frame
+        frameAnimationTo = target
+        frameAnimationStart = Date()
+
+        guard abs(frameAnimationFrom.height - target.height) > 0.5 else {
+            panel.setFrame(target, display: true)
+            return
+        }
+
+        let timer = Timer(
+            timeInterval: 1.0 / 60.0,
+            target: self,
+            selector: #selector(stepFrameAnimation(_:)),
+            userInfo: nil,
+            repeats: true
+        )
+        RunLoop.main.add(timer, forMode: .common)
+        frameAnimation = timer
+    }
+
+    @objc private func stepFrameAnimation(_ timer: Timer) {
+        let duration: TimeInterval = 0.24
+        let t = min(1, max(0, Date().timeIntervalSince(frameAnimationStart) / duration))
+        let eased = 1 - pow(1 - t, 3)
+        let from = frameAnimationFrom
+        let to = frameAnimationTo
+        let height = from.height + (to.height - from.height) * eased
+        let frame = NSRect(
+            x: to.minX,
+            y: to.maxY - height,
+            width: to.width,
+            height: height
+        )
+        panel.setFrame(frame, display: true)
+
+        if t >= 1 {
+            timer.invalidate()
+            frameAnimation = nil
+            panel.setFrame(to, display: true)
         }
     }
 

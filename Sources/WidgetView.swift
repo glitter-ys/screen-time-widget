@@ -3,10 +3,11 @@ import SwiftUI
 enum WidgetLayout {
     static let capsuleWidth: CGFloat = 220
     static let capsuleHeight: CGFloat = 44
-    static let drawerWidth: CGFloat = 240
-    static let drawerHeight: CGFloat = 150
+    static let drawerWidth: CGFloat = 260
+    static let drawerHeight: CGFloat = 244
+    static let drawerCornerRadius: CGFloat = 32
     static let gap: CGFloat = 8
-    static let horizontalPadding: CGFloat = 22
+    static let horizontalPadding: CGFloat = 24
     static let topPadding: CGFloat = 10
     static let bottomPadding: CGFloat = 14
     static let windowWidth = capsuleWidth + horizontalPadding * 2
@@ -297,6 +298,9 @@ private struct GoalDrawer: View {
                 .frame(height: 5)
                 .padding(.top, 5)
 
+            EncouragementBanner(encouragement: metrics.encouragement, theme: metrics.theme)
+                .padding(.top, 9)
+
             HStack(spacing: 8) {
                 Text(metrics.remainingText)
                     .font(.system(size: 11.5, weight: .medium))
@@ -315,7 +319,7 @@ private struct GoalDrawer: View {
             Spacer(minLength: 4)
 
             Rectangle()
-                .fill(metrics.theme.hairline)
+                .fill(EncouragementPalette.line(light: metrics.theme.isLight))
                 .frame(height: 1)
 
             HStack(spacing: 6) {
@@ -340,7 +344,7 @@ private struct GoalDrawer: View {
         .frame(width: WidgetLayout.drawerWidth, height: WidgetLayout.drawerHeight, alignment: .topLeading)
         .background {
             GlassSurface(
-                radius: 20,
+                radius: WidgetLayout.drawerCornerRadius,
                 top: metrics.theme.drawerTop,
                 bottom: metrics.theme.drawerBottom,
                 glow: metrics.accent,
@@ -348,7 +352,7 @@ private struct GoalDrawer: View {
             )
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: WidgetLayout.drawerCornerRadius, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
                         colors: [metrics.theme.borderTop, metrics.theme.borderBottom],
@@ -360,6 +364,47 @@ private struct GoalDrawer: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(metrics.heroLabel) \(metrics.heroText)，\(metrics.percentText)，\(metrics.remainingText)")
+    }
+}
+
+private struct EncouragementBanner: View {
+    let encouragement: Encouragement
+    let theme: WidgetTheme
+
+    var body: some View {
+        let light = theme.isLight
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: encouragement.icon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(EncouragementPalette.accent(light: light))
+                .frame(width: 18, height: 18, alignment: .center)
+                .padding(.top, 1.5)
+                .accessibilityHidden(true)
+
+            Text(encouragement.text)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(EncouragementPalette.primaryText(light: light))
+                .lineSpacing(6)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(theme.encouragementSurface)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(
+                    EncouragementPalette.accent(light: light).opacity(light ? 0.18 : 0.26),
+                    lineWidth: 0.8
+                )
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(encouragement.text)
     }
 }
 
@@ -393,7 +438,7 @@ private struct GoalProgressBar: View {
     private func continuousBar(width: CGFloat, fraction: Double) -> some View {
         ZStack(alignment: .leading) {
             Capsule(style: .continuous)
-                .fill(metrics.theme.track)
+                .fill(EncouragementPalette.line(light: metrics.theme.isLight))
                 .overlay {
                     Capsule(style: .continuous)
                         .strokeBorder(metrics.theme.innerBorder, lineWidth: 0.5)
@@ -441,7 +486,7 @@ private struct GoalProgressBar: View {
         return HStack(spacing: spacing) {
             ForEach(0..<count, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                    .fill(metrics.theme.track)
+                    .fill(EncouragementPalette.line(light: metrics.theme.isLight))
                     .overlay {
                         if index < filled {
                             RoundedRectangle(cornerRadius: 2.5, style: .continuous)
@@ -479,7 +524,7 @@ private struct GoalProgressBar: View {
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                    ) : AnyShapeStyle(metrics.theme.track))
+                    ) : AnyShapeStyle(EncouragementPalette.line(light: metrics.theme.isLight)))
                     .frame(width: tickWidth, height: 5)
             }
         }
@@ -568,9 +613,11 @@ extension WidgetMetrics {
     ) -> WidgetMetrics {
         let goalSeconds = Double(goalMinutes * 60)
         let progress = seconds / goalSeconds
-        let percent = Int((progress * 100).rounded())
+        let complete = seconds + 0.001 >= goalSeconds
+        let percent = complete
+            ? Int((progress * 100).rounded(.down))
+            : min(99, Int((progress * 100).rounded(.down)))
         let remaining = goalSeconds - seconds
-        let complete = progress >= 1
         let tone: StatusTone = paused ? .paused : (complete ? .achieved : .running)
         return WidgetMetrics(
             timeText: WidgetFormat.clock(seconds),
@@ -583,15 +630,23 @@ extension WidgetMetrics {
             heroLabel: "今日已亮屏",
             progressLabel: "今日进度",
             goalText: WidgetFormat.goalLong(goalMinutes),
-            remainingText: remaining > 0
+            remainingText: remaining > 0.5
                 ? "还差 \(WidgetFormat.chinese(remaining))"
-                : "已超出 \(WidgetFormat.chinese(-remaining))",
+                : (remaining >= -0.5
+                    ? "已达成目标"
+                    : "已超出 \(WidgetFormat.chinese(-remaining))"),
             statusText: paused
                 ? "已暂停 · 不计入今日"
                 : (complete ? "目标已达成" : "亮屏计时中"),
             tone: tone,
             theme: theme,
-            completionEvent: 0
+            completionEvent: 0,
+            encouragement: Encouragement.resolve(
+                seconds: seconds,
+                goalSeconds: goalSeconds,
+                isPaused: paused,
+                ready: true
+            )
         )
     }
 

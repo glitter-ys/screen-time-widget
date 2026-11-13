@@ -115,6 +115,11 @@ enum SnapshotRenderer {
             to: base.appendingPathComponent("preview-history-light.png")
         )
         write(
+            EncouragementShowcase(),
+            size: CGSize(width: 900, height: 760),
+            to: base.appendingPathComponent("preview-encouragement.png")
+        )
+        write(
             AppIconArt(),
             size: CGSize(width: 1024, height: 1024),
             to: base.appendingPathComponent("app-icon-1024.png"),
@@ -153,6 +158,38 @@ enum SnapshotRenderer {
 }
 
 // MARK: - History preview
+
+private struct EncouragementShowcase: View {
+    var body: some View {
+        ZStack {
+            DesktopWallpaper()
+            VStack(spacing: 18) {
+                HStack(spacing: 18) {
+                    card(0, "0% · 未开始")
+                    card(0.3, "30% · 起步")
+                    card(0.6, "60% · 过半")
+                }
+                HStack(spacing: 18) {
+                    card(0.8, "80% · 冲刺")
+                    card(1.0, "100% · 达成")
+                    card(0.6, "暂停 · 休息", paused: true)
+                }
+            }
+            .padding(.top, 24)
+        }
+    }
+
+    private func card(_ ratio: Double, _ label: String, paused: Bool = false) -> some View {
+        VStack(spacing: 8) {
+            PreviewChrome(
+                metrics: .preview(theme: .terracotta, seconds: 8 * 3600 * ratio, paused: paused),
+                expanded: true
+            )
+            .frame(width: WidgetLayout.windowWidth, height: WidgetLayout.expandedHeight)
+            ShowcaseLabel(text: label)
+        }
+    }
+}
 
 private struct HistoryPreviewScene: View {
     var body: some View {
